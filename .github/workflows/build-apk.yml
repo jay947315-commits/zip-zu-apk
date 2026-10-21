@@ -1,0 +1,52 @@
+name: Build APK from Android ZIP
+
+on:
+  push:
+    paths:
+      - "input/**/*.zip"
+      - ".github/workflows/build-apk.yml"
+      - "scripts/extract-android-project.py"
+  workflow_dispatch:
+    inputs:
+      zip_path:
+        description: "Pfad zur Android-Projekt-ZIP im Repository"
+        required: true
+        default: "input/app.zip"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Extract Android project
+        env:
+          ZIP_PATH: ${{ inputs.zip_path || 'input/app.zip' }}
+        run: |
+          python3 scripts/extract-android-project.py \
+            "$ZIP_PATH" "$RUNNER_TEMP/android-project"
+
+      - name: Build debug APK
+        run: |
+          wrapper="$(find "$RUNNER_TEMP/android-project" -type f -name gradlew -print -quit)"
+          cd "$(dirname "$wrapper")"
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: ${{ runner.temp }}/android-project/**/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
